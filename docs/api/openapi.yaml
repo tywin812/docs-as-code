@@ -1,0 +1,265 @@
+openapi: 3.0.3
+
+info:
+  title: Excuse Generator API
+  description: |
+    API сервиса «Отмазкогенератор». По описанию ситуации ML-модель генерирует
+    отмазку в выбранном тоне и оценивает, насколько ей поверят (от 0 до 100).
+  version: 1.0.0
+
+servers:
+  - url: https://example.com/api/v1
+
+tags:
+  - name: Excuses
+    description: Генерация отмазок и история
+  - name: Tones
+    description: Справочник тонов
+
+security:
+  - bearerAuth: []
+
+paths:
+  /excuses:
+    post:
+      tags: [Excuses]
+      summary: Сгенерировать отмазку
+      description: |
+        Принимает описание ситуации и тон, передаёт их ML-модели и возвращает
+        текст отмазки с оценкой убедительности. Результат сохраняется в историю.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExcuseRequest'
+      responses:
+        '201':
+          description: Отмазка сгенерирована
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Excuse'
+        '400':
+          description: Некорректный запрос (пустой или слишком короткий текст, неизвестный тон)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_SITUATION
+                message: Situation text must be between 5 and 500 characters
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          description: Модель не смогла обработать текст ситуации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: UNPROCESSABLE_SITUATION
+                message: Could not generate an excuse, please rephrase the situation
+        '503':
+          description: ML-модель временно недоступна
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: MODEL_UNAVAILABLE
+                message: Model is temporarily unavailable, try again later
+    get:
+      tags: [Excuses]
+      summary: Получить историю отмазок
+      description: Возвращает отмазки текущего пользователя от новых к старым.
+      parameters:
+        - name: limit
+          in: query
+          description: Сколько записей вернуть
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Сколько записей пропустить
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: История отмазок
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Excuse'
+        '400':
+          description: Некорректные параметры пагинации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_PAGINATION
+                message: Limit must be between 1 and 100
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /excuses/{id}:
+    get:
+      tags: [Excuses]
+      summary: Получить отмазку по идентификатору
+      parameters:
+        - name: id
+          in: path
+          description: Идентификатор отмазки
+          required: true
+          schema:
+            type: integer
+          example: 123
+      responses:
+        '200':
+          description: Отмазка найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Excuse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Отмазка не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: EXCUSE_NOT_FOUND
+                message: Excuse with id 123 not found
+
+  /tones:
+    get:
+      tags: [Tones]
+      summary: Получить доступные тоны отмазок
+      security: []
+      responses:
+        '200':
+          description: Список тонов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tone'
+        '500':
+          description: Внутренняя ошибка сервиса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INTERNAL_ERROR
+                message: Internal server error
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Пользователь не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: UNAUTHORIZED
+            message: Authorization token is missing or invalid
+
+  schemas:
+    Tone:
+      type: string
+      description: Тон отмазки
+      enum:
+        - pitiful
+        - official
+        - mystic
+      example: pitiful
+
+    ExcuseRequest:
+      type: object
+      required:
+        - situation
+        - tone
+      properties:
+        situation:
+          type: string
+          minLength: 5
+          maxLength: 500
+          description: Описание ситуации, для которой нужна отмазка
+          example: Опоздал на пару на 40 минут
+        tone:
+          $ref: '#/components/schemas/Tone'
+
+    BelievabilityScore:
+      type: object
+      description: Оценка убедительности отмазки
+      properties:
+        value:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 82
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: Уверенность модели в своей оценке
+          example: 0.91
+
+    Excuse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 123
+        situation:
+          type: string
+          example: Опоздал на пару на 40 минут
+        tone:
+          $ref: '#/components/schemas/Tone'
+        text:
+          type: string
+          example: Меня задержал внезапная поломка маршрутки, и я бежал последние два километра.
+        score:
+          $ref: '#/components/schemas/BelievabilityScore'
+        modelVersion:
+          type: string
+          example: excuse-gen-1.2.0
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-24T09:15:00Z'
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: INVALID_SITUATION
+        message:
+          type: string
+          example: Situation text must be between 5 and 500 characters
