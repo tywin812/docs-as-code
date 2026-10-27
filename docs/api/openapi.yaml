@@ -123,7 +123,8 @@ paths:
           required: true
           schema:
             type: integer
-          example: 123
+            minimum: 1
+            example: 123
       responses:
         '200':
           description: Отмазка найдена
@@ -131,6 +132,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Excuse'
+        '400':
+          description: Некорректный идентификатор (не является положительным целым числом)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: INVALID_ID
+                message: Excuse id must be a positive integer
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -213,6 +223,9 @@ components:
     BelievabilityScore:
       type: object
       description: Оценка убедительности отмазки
+      required:
+        - value
+        - confidence
       properties:
         value:
           type: integer
@@ -229,6 +242,14 @@ components:
 
     Excuse:
       type: object
+      required:
+        - id
+        - situation
+        - tone
+        - text
+        - score
+        - modelVersion
+        - createdAt
       properties:
         id:
           type: integer
